@@ -1,16 +1,49 @@
-const http = require("http");
+require("dotenv").config();
 
-const PORT = parseInt(process.env.PORT || "8080");
-const APP_NAME = process.env.APP_NAME || "node-hello";
-const ENV_NAME = process.env.ENV_NAME || "unknown";
+const compression = require("compression");
+const dayjs = require("dayjs");
+const express = require("express");
+const helmet = require("helmet");
+const escape = require("lodash/escape");
+const morgan = require("morgan");
+const { z } = require("zod");
+
+const APP_VERSION = 0;
+
+const envSchema = z.object({
+  PORT: z.coerce.number().int().positive().default(8080),
+  APP_NAME: z.string().min(1).default("node-hello"),
+  ENV_NAME: z.string().min(1).default("unknown"),
+});
+
+const env = envSchema.parse(process.env);
+const app = express();
+
+app.disable("x-powered-by");
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(compression());
+app.use(morgan("combined"));
+
+function noStore(res) {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "Surrogate-Control": "no-store",
+  });
+}
 
 function page() {
+  const appName = escape(env.APP_NAME);
+  const envName = escape(env.ENV_NAME);
+  const renderedAt = escape(dayjs().format("YYYY-MM-DD HH:mm:ss"));
+
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${APP_NAME}</title>
+    <title>${appName}</title>
     <style>
       :root {
         color-scheme: light;
@@ -63,34 +96,38 @@ function page() {
   </head>
   <body>
     <main>
-      <h1>Hello from ${APP_NAME}</h1>
+      <h1>Hello from ${appName}</h1>
       <p>This page is served by a minimal Node.js application deployed through the automated deployment system.</p>
       <dl>
         <dt>Environment</dt>
-        <dd>${ENV_NAME}</dd>
+        <dd>${envName}</dd>
         <dt>Framework</dt>
-        <dd>Node.js (stdlib)</dd>
+        <dd>Node.js + Express</dd>
+        <dt>Version</dt>
+        <dd>${APP_VERSION}</dd>
+        <dt>Rendered at</dt>
+        <dd>${renderedAt}</dd>
       </dl>
     </main>
   </body>
 </html>`;
 }
 
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok" }));
-    return;
-  }
-
-  const body = page();
-  res.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body),
-  });
-  res.end(body);
+app.get("/health", (req, res) => {
+  noStore(res);
+  res.json({ status: "ok" });
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`${APP_NAME} listening on port ${PORT}`);
+app.get("/version", (req, res) => {
+  noStore(res);
+  res.json({ version: APP_VERSION });
+});
+
+app.get("/", (req, res) => {
+  noStore(res);
+  res.type("html").send(page());
+});
+
+app.listen(env.PORT, "0.0.0.0", () => {
+  console.log(`${env.APP_NAME} listening on port ${env.PORT}`);
 });
