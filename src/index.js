@@ -8,7 +8,7 @@ const escape = require("lodash/escape");
 const morgan = require("morgan");
 const { z } = require("zod");
 
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8080),
